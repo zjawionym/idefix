@@ -3,6 +3,8 @@
 #include "units.hpp"
 #include "coagulation.hpp"
 
+Coagulation *coagulation;
+
 void CheckConservation(DataBlock &data) {
   static bool firstCall = true;
   static real initialDustMass = 0.0;
@@ -65,27 +67,18 @@ void CheckConservation(DataBlock &data) {
   idfx::cout << "Analysis: done." << std::endl;
 }
 
+
+void MyCoagSourceTerm(DataBlock &dataRef, const real t, const real dtin) {
+  DataBlock *data = &dataRef;
+  coagulation->AddSourceTerm(data, t, dtin);
+}
+
+//========== Setup constructor ==========//
 Setup::Setup(Input &input, Grid &grid, DataBlock &data, Output &output) {
-  const bool coag = input.GetOrSet<bool>("Coala","coag",0,0);
-
-  if(coag) {
-    const int  kernel  = input.GetOrSet<int>("Coala","kernel",0,0);
-    const int  kpol    = input.GetOrSet<int>("Coala","kpol",0,0);
-    const real eps     = input.GetOrSet<real>("Coala","eps",0,0)/idfx::units.GetDensity()*idfx::units.GetLength()*idfx::units.GetLength()*idfx::units.GetLength();
-    const real coagCFL = input.GetOrSet<real>("Coala","coagCFL",0,0);
-
-    if(kpol!=0) {
-      IDEFIX_ERROR("Only kpol = 0 is available when using Coala in Idefix");
-    }
-    idfx::cout << "Have dust coagulation" << std::endl;
-    int nSpecies = data.dust.size();
-    idfx::cout << "Evolving nSpecies = " << nSpecies << " dust species" << std::endl;
-
-    CoagulationGlob = new Coagulation(data, kernel, eps, coagCFL);
-    data.EnrollUserStepFirst(&CoagSourceTerm);  // Enroll the coagulation source term
-  }
+  coagulation = new Coagulation(input);
+  data.EnrollUserStepFirst(&MyCoagSourceTerm);  // Enroll the coagulation source term
 }
 
 Setup::~Setup() {
-  delete CoagulationGlob;
+  delete coagulation;
 }

@@ -5,7 +5,7 @@ import inifix
 import matplotlib.pyplot as plt
 
 def initflow(data): 
-    input_file = "idefix-constantKernel.ini"  # To modified : we need to collect directly the parameters of the input file via the input class of idefix 
+    input_file = "idefix-constantKernel.ini"  # To modified : we need to collect directly the parameters of the input file via the input class of idefix, in pydefix
     c = utils.SetupParams(inifix.load(input_file))
     rho0 = c.rho0/c.density
     nSpecies = c.nSpecies

@@ -5,7 +5,9 @@
 class Coagulation {
  public:
   // Constructor: allocate and load all coagulation tables
-  Coagulation(DataBlock &data, int kernel, real eps, real coagCFL);
+  Coagulation(Input &input);
+
+  void AddSourceTerm(DataBlock *data, const real t, const real dtin);
 
   IdefixArray1D<real> binWidth;
   IdefixArray3D<real> coagTabFlux;
@@ -14,7 +16,3 @@ class Coagulation {
   real eps;
   real coagCFL;
 };
-
-extern Coagulation *CoagulationGlob;
-
-void CoagSourceTerm(DataBlock &data, const real t, const real dtin);

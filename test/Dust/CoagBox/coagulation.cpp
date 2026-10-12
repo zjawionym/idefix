@@ -2,65 +2,74 @@
 #include "coagulation.hpp"
 #include "npy.hpp"
 
-Coagulation *CoagulationGlob;
+Coagulation::Coagulation(Input &input) {
 
-Coagulation::Coagulation(DataBlock &data, int kernel, real eps, real coagCFL) {
-    this->kernel = kernel;
-    this->eps = eps;
-    this->coagCFL = coagCFL;
+  const int  kpol = input.GetOrSet<int>("Coala","kpol",0,0);
+  if(kpol!=0) {
+    IDEFIX_ERROR("Only kpol = 0 is available when using Coala in Idefix");
+  }
+  const int  nSpecies = input.Get<int>("Dust","nSpecies",0);
+  const real DENSITY  = input.GetOrSet<real>("Units","density",0,1.);
+  const real LENGTH   = input.GetOrSet<real>("Units","length",0,1.);
+  this->kernel   = input.GetOrSet<int>("Coala","kernel",0,3);
+  this->eps      = input.GetOrSet<real>("Coala","eps",0,1e-20)/DENSITY*LENGTH*LENGTH*LENGTH;
+  this->coagCFL  = input.GetOrSet<real>("Coala","coagCFL",0,0.5);
 
-    //==============================================//
-    //==============================================//
-    // In this part, we load the coagulation tables //
-    //==============================================//
-    //==============================================//
-    const int nSpecies = data.dust.size();
-    //===== Load the mass grid =====// 
-    std::string filename_massgrid = "data/test-massgrid-kernel-"+std::to_string(kernel)+".npy";
-    std::vector<uint64_t> shape_massgrid;
-    bool fortran_order_massgrid;
-    std::vector<double> massgrid;
-    npy::LoadArrayFromNumpy(filename_massgrid, shape_massgrid, fortran_order_massgrid, massgrid);
-      //===== verification =====//
-    if(massgrid.size() != static_cast<size_t>(nSpecies+1)) {
-      IDEFIX_ERROR("Mass grid has an unexpected size");
-    }
-      //========================//
+  idfx::cout << "Have dust coagulation with nSpecies = " << nSpecies << " dust species" << std::endl;
+  idfx::cout << "    with : kernel = " << kernel << " --- eps = " << eps << " --- coagCFL = " << coagCFL << std::endl;
 
-    this->binWidth = IdefixArray1D<real>("binWidth", nSpecies);
-    IdefixHostArray1D<real> binWidthHost = Kokkos::create_mirror_view(this->binWidth);
-    for(int n = 0; n <nSpecies; n++) {
-      binWidthHost(n) = massgrid[n+1] - massgrid[n];
-    }
-    Kokkos::deep_copy(this->binWidth, binWidthHost);
+  //==============================================//
+  //==============================================//
+  // In this part, we load the coagulation tables //
+  //==============================================//
+  //==============================================//
 
-    //===== Loading the Flux Table =====//
-    std::string filename_coagTabFlux = "data/test-coagTabFlux-kernel-"+std::to_string(kernel)+".npy";
-    std::vector<uint64_t> shape_coagTabFlux;
-    bool fortran_order_coagTabFlux;
-    std::vector<double> coagTabFlux;
-    npy::LoadArrayFromNumpy(filename_coagTabFlux, shape_coagTabFlux, fortran_order_coagTabFlux, coagTabFlux);
-      //===== verification =====//
-    const size_t expectedSize = static_cast<size_t>(nSpecies)*static_cast<size_t>(nSpecies)*static_cast<size_t>(nSpecies);
-    if(coagTabFlux.size() != expectedSize) {
-      IDEFIX_ERROR("Coagulation flux table has an unexpected size");
-    }
-      //========================//
+  //===== Load the mass grid =====// 
+  std::string filename_massgrid = "data/test-massgrid-kernel-"+std::to_string(kernel)+".npy";
+  std::vector<uint64_t> shape_massgrid;
+  bool fortran_order_massgrid;
+  std::vector<double> massgrid;
+  npy::LoadArrayFromNumpy(filename_massgrid, shape_massgrid, fortran_order_massgrid, massgrid);
+    //===== verification =====//
+  if(massgrid.size() != static_cast<size_t>(nSpecies+1)) {
+    IDEFIX_ERROR("Mass grid has an unexpected size");
+  }
+    //========================//
 
-    this->coagTabFlux = IdefixArray3D<real>("coagTabFlux", nSpecies, nSpecies, nSpecies);
-    IdefixHostArray3D<real> coagTabFluxHost = Kokkos::create_mirror_view(this->coagTabFlux);
-    for(int i=0; i<nSpecies; i++) {
-      for(int j=0; j<nSpecies; j++) {
-        for(int k=0; k<nSpecies; k++) {
-          int index = i*nSpecies*nSpecies + j*nSpecies + k;
-          coagTabFluxHost(i,j,k) = coagTabFlux[index];
-        }
+  this->binWidth = IdefixArray1D<real>("binWidth", nSpecies);
+  IdefixHostArray1D<real> binWidthHost = Kokkos::create_mirror_view(this->binWidth);
+  for(int n = 0; n <nSpecies; n++) {
+    binWidthHost(n) = massgrid[n+1] - massgrid[n];
+  }
+  Kokkos::deep_copy(this->binWidth, binWidthHost);
+
+  //===== Loading the Flux Table =====//
+  std::string filename_coagTabFlux = "data/test-coagTabFlux-kernel-"+std::to_string(kernel)+".npy";
+  std::vector<uint64_t> shape_coagTabFlux;
+  bool fortran_order_coagTabFlux;
+  std::vector<double> coagTabFlux;
+  npy::LoadArrayFromNumpy(filename_coagTabFlux, shape_coagTabFlux, fortran_order_coagTabFlux, coagTabFlux);
+    //===== verification =====//
+  const size_t expectedSize = static_cast<size_t>(nSpecies)*static_cast<size_t>(nSpecies)*static_cast<size_t>(nSpecies);
+  if(coagTabFlux.size() != expectedSize) {
+    IDEFIX_ERROR("Coagulation flux table has an unexpected size");
+  }
+    //========================//
+
+  this->coagTabFlux = IdefixArray3D<real>("coagTabFlux", nSpecies, nSpecies, nSpecies);
+  IdefixHostArray3D<real> coagTabFluxHost = Kokkos::create_mirror_view(this->coagTabFlux);
+  for(int i=0; i<nSpecies; i++) {
+    for(int j=0; j<nSpecies; j++) {
+      for(int k=0; k<nSpecies; k++) {
+        int index = i*nSpecies*nSpecies + j*nSpecies + k;
+        coagTabFluxHost(i,j,k) = coagTabFlux[index];
       }
     }
-    Kokkos::deep_copy(this->coagTabFlux, coagTabFluxHost);
+  }
+  Kokkos::deep_copy(this->coagTabFlux, coagTabFluxHost);
 }
 
-void CoagSourceTerm(DataBlock &dataRef, const real t, const real dtin) {
+void Coagulation::AddSourceTerm(DataBlock *data, const real t, const real dtin) {
   //==============================================//
   /*
   Coagulation source term : compute the coagulation product to finally upload the dust densities. 
@@ -70,18 +79,17 @@ void CoagSourceTerm(DataBlock &dataRef, const real t, const real dtin) {
   This version does not work on GPU yet.
   */
   //==============================================//
-  DataBlock *data = &dataRef;
   data->PrimToCons();
-  IdefixArray1D<real> h = CoagulationGlob->binWidth;
-  IdefixArray3D<real> coagTabFlux = CoagulationGlob->coagTabFlux;
+  IdefixArray1D<real> h = this->binWidth;
+  IdefixArray3D<real> coagTabFlux = this->coagTabFlux;
   const int nSpecies = data->dust.size();
   const int test_size = 20;  // Because we can't give nSpecies in the KOKKOS_LAMBDA
 
-  const real eps = CoagulationGlob->eps;
-  const real coagCFL = CoagulationGlob->coagCFL;
-  const bool physicalKernel = (CoagulationGlob->kernel==3);
+  const real eps = this->eps;
+  const real coagCFL = this->coagCFL;
+  const bool physicalKernel = (this->kernel==3);
 
-  idefix_for("CoagSourceTerm",0,data->np_tot[KDIR],0,data->np_tot[JDIR],0,data->np_tot[IDIR],
+  idefix_for("Coagulation::AddSourceTerm",0,data->np_tot[KDIR],0,data->np_tot[JDIR],0,data->np_tot[IDIR],
             KOKKOS_LAMBDA (int k, int j, int i) {
               real rho[test_size];
               real g0[test_size];
@@ -97,17 +105,6 @@ void CoagSourceTerm(DataBlock &dataRef, const real t, const real dtin) {
                 vx1[n] = data->dust[n]->Uc(MX1,k,j,i)/rho[n];
                 vx2[n] = data->dust[n]->Uc(MX2,k,j,i)/rho[n];
                 vx3[n] = data->dust[n]->Uc(MX3,k,j,i)/rho[n];
-
-                /*
-                // To have a constant drift velocity that does not evolve in sub-cycling
-                // WARNING: dirty here! check that it corresponds to Compute_test_velocity in utils.py
-                real vx = 1e-2 + (1e-1 - 1e-2)*n/(nSpecies - 1);
-                real vy = 1.3*vx;
-                real vz = 1.7*vx;
-                vx1[n] = vx;
-                vx2[n] = vy;
-                vx3[n] = vz;
-                */
               }
               
               // Relative velocity
@@ -165,7 +162,9 @@ void CoagSourceTerm(DataBlock &dataRef, const real t, const real dtin) {
               for(int n=0; n<nSpecies; n++) {
                 data->dust[n]->Uc(RHO,k,j,i) = rho[n];
 
-                // To keep a constant velocity, just for the test with kernel = 3
+                // To keep a constant velocity (just for the test with kernel = 3)
+                // If we don't do that, the update on densities leads to update on velocities
+                // We thus update the momentum with new densities in order to keep velocities (and dv) constants
                 data->dust[n]->Uc(MX1,k,j,i) = rho[n]*vx1[n];
                 data->dust[n]->Uc(MX2,k,j,i) = rho[n]*vx2[n];
                 data->dust[n]->Uc(MX3,k,j,i) = rho[n]*vx3[n];
