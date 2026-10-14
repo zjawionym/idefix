@@ -3,7 +3,6 @@
 #include "npy.hpp"
 
 Coagulation::Coagulation(Input &input) {
-
   const int  kpol = input.GetOrSet<int>("Coala","kpol",0,0);
   if(kpol!=0) {
     IDEFIX_ERROR("Only kpol = 0 is available when using Coala in Idefix");
