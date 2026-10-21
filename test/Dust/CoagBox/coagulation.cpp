@@ -87,6 +87,7 @@ void Coagulation::AddSourceTerm(DataBlock *data, const real t, const real dtin) 
   const real eps = this->eps;
   const real coagCFL = this->coagCFL;
   const bool physicalKernel = (this->kernel==3);
+  auto AllUc = data->dust[0]->AllUc;
 
   idefix_for("Coagulation::AddSourceTerm",0,data->np_tot[KDIR],0,data->np_tot[JDIR],0,data->np_tot[IDIR],
             KOKKOS_LAMBDA (int k, int j, int i) {
@@ -100,12 +101,12 @@ void Coagulation::AddSourceTerm(DataBlock *data, const real t, const real dtin) 
 
               // Initial State
               for(int n=0; n<nSpecies; n++) {
-                rho[n] = data->dust[n]->Uc(RHO,k,j,i);
-                vx1[n] = data->dust[n]->Uc(MX1,k,j,i)/rho[n];
-                vx2[n] = data->dust[n]->Uc(MX2,k,j,i)/rho[n];
-                vx3[n] = data->dust[n]->Uc(MX3,k,j,i)/rho[n];
+                rho[n] = AllUc(n,RHO,k,j,i);
+                vx1[n] = AllUc(n,MX1,k,j,i)/rho[n];
+                vx2[n] = AllUc(n,MX2,k,j,i)/rho[n];
+                vx3[n] = AllUc(n,MX3,k,j,i)/rho[n];
               }
-              
+
               // Relative velocity
               if(physicalKernel) {
                 for(int lp=0; lp<nSpecies; lp++) {
@@ -159,14 +160,13 @@ void Coagulation::AddSourceTerm(DataBlock *data, const real t, const real dtin) 
               }
               //===== UPDATE THE FINAL DENSITIES =====//
               for(int n=0; n<nSpecies; n++) {
-                data->dust[n]->Uc(RHO,k,j,i) = rho[n];
-
+                AllUc(n,RHO,k,j,i) = rho[n];
                 // To keep a constant velocity (just for the test with kernel = 3)
                 // If we don't do that, the update on densities leads to update on velocities
                 // We thus update the momentum with new densities in order to keep velocities (and dv) constants
-                data->dust[n]->Uc(MX1,k,j,i) = rho[n]*vx1[n];
-                data->dust[n]->Uc(MX2,k,j,i) = rho[n]*vx2[n];
-                data->dust[n]->Uc(MX3,k,j,i) = rho[n]*vx3[n];
+                AllUc(n,MX1,k,j,i) = rho[n]*vx1[n];
+                AllUc(n,MX2,k,j,i) = rho[n]*vx2[n];
+                AllUc(n,MX3,k,j,i) = rho[n]*vx3[n];
               }
             }
   );
