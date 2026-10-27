@@ -70,24 +70,131 @@ Coagulation::Coagulation(Input &input) {
 
 void Coagulation::AddSourceTerm(DataBlock *data, const real t, const real dtin) {
   //==============================================//
-  /*
-  Coagulation source term : compute the coagulation product to finally upload the dust densities. 
-  This function is implemented via operator splitting : coagulation is integrated in a step.
-  Hence, enroll the function with `data.EnrollUserStepFirst(&CoagSourceTerm);`.
-  This version does not preserve bins momentum yet.
-  This version does not work on GPU yet.
-  */
+  
+  // Coagulation source term : compute the coagulation product to finally upload the dust densities. 
+  // This function is implemented via operator splitting : coagulation is integrated in a step.
+  // Hence, enroll the function with `data.EnrollUserStepFirst(&CoagSourceTerm);`.
+  // This version does not preserve bins momentum yet.
+  // This version does not work on GPU yet.
+  
   //==============================================//
   data->PrimToCons();
   IdefixArray1D<real> h = this->binWidth;
   IdefixArray3D<real> coagTabFlux = this->coagTabFlux;
   const int nSpecies = data->dust.size();
+  auto AllUc = data->dust[0]->AllUc;
   const int test_size = 20;  // Because we can't give nSpecies in the KOKKOS_LAMBDA
 
   const real eps = this->eps;
   const real coagCFL = this->coagCFL;
   const bool physicalKernel = (this->kernel==3);
+
+  Kokkos::MDRangePolicy<Kokkos::Rank<3>> policy({0,0,0}, {data->np_tot[KDIR], data->np_tot[JDIR], data->np_tot[IDIR]});
+  Kokkos::parallel_for("Coagulation::addSourceTerm-Space", policy,
+    KOKKOS_LAMBDA (int k, int j, int i) {
+      real rho[test_size];
+      real g0[test_size];
+      real vx1[test_size];
+      real vx2[test_size];
+      real vx3[test_size];
+      real deltaV[test_size][test_size];
+      real Flux[test_size+1];
+
+      // Initial State
+      for(int n=0; n<nSpecies; n++) {
+        rho[n] = AllUc(n,RHO,k,j,i);
+        vx1[n] = AllUc(n,MX1,k,j,i)/rho[n];
+        vx2[n] = AllUc(n,MX2,k,j,i)/rho[n];
+        vx3[n] = AllUc(n,MX3,k,j,i)/rho[n];
+      }
+
+      // Relative velocity
+      if(physicalKernel) {
+        for(int lp=0; lp<nSpecies; lp++) {
+          for(int l=0; l<nSpecies; l++) {
+            real dvx = vx1[lp] - vx1[l];
+            real dvy = vx2[lp] - vx2[l];
+            real dvz = vx3[lp] - vx3[l];
+            deltaV[lp][l] = sqrt(dvx*dvx + dvy*dvy + dvz*dvz);
+          }
+        }
+      }
+
+      //===== COAGULATION SUBCYCLING =====//
+      real time = 0.0;
+      while(time<dtin) {
+        Flux[0] = 0.0;  // No mass flux crossing the left boundary of the distribution
+        for(int n=0; n<nSpecies; n++) {
+          g0[n] = rho[n]/h(n);
+        }
+        //===== FLUX CALCULATION =====//
+        for(int n=0; n<nSpecies; n++) {
+          real flux = 0.0;
+          for(int lp=0; lp <= n; lp++) {
+            real g0_lp = g0[lp];
+            for(int l=0; l<nSpecies; l++) {
+              real g0_l = g0[l];
+              real delta_v = physicalKernel ? deltaV[lp][l] : 1.0;
+              flux += g0_lp*g0_l*coagTabFlux(n,lp,l)*delta_v;
+            }
+          }
+          Flux[n+1] = flux;
+        }
+        //===== CFL CALCULATION =====//
+        real dt_sub = std::numeric_limits<double>::max();
+        for(int n=0; n<nSpecies; n++) {
+          real dflux = Flux[n+1] - Flux[n];
+          if(std::abs(dflux)>0.0 && rho[n]>eps*h(n)) {
+            dt_sub = std::min(dt_sub, std::abs(rho[n]/dflux));
+          }
+        }
+        real dt_coag = dt_sub*coagCFL;
+        dt_coag = std::min(dt_coag, dtin-time);  // Last substep
+        if(dt_coag<=0.0) {
+          IDEFIX_ERROR("Coagulation time step is non-positive");
+        }
+        //===== EULER UPDATE =====//
+        for(int n=0; n<nSpecies; n++) {
+          rho[n] = std::max(rho[n] - dt_coag*(Flux[n+1] - Flux[n]), eps*h(n));
+        }
+        time += dt_coag;
+      }
+      //===== UPDATE THE FINAL DENSITIES =====//
+      for(int n=0; n<nSpecies; n++) {
+        AllUc(n,RHO,k,j,i) = rho[n];
+        // To keep a constant velocity (just for the test with kernel = 3)
+        // If we don't do that, the update on densities leads to update on velocities
+        // We thus update the momentum with new densities in order to keep velocities (and dv) constants
+        AllUc(n,MX1,k,j,i) = rho[n]*vx1[n];
+        AllUc(n,MX2,k,j,i) = rho[n]*vx2[n];
+        AllUc(n,MX3,k,j,i) = rho[n]*vx3[n];
+      }
+    }
+  );
+  data->ConsToPrim();
+}
+
+/*
+void Coagulation::AddSourceTerm(DataBlock *data, const real t, const real dtin) {
+  //==============================================//
+  
+  // Coagulation source term : compute the coagulation product to finally upload the dust densities. 
+  // This function is implemented via operator splitting : coagulation is integrated in a step.
+  // Hence, enroll the function with `data.EnrollUserStepFirst(&CoagSourceTerm);`.
+  // This version does not preserve bins momentum yet.
+  // This version does not work on GPU yet.
+  
+  //==============================================//
+  data->PrimToCons();
+  IdefixArray1D<real> h = this->binWidth;
+  IdefixArray3D<real> coagTabFlux = this->coagTabFlux;
+  const int nSpecies = data->dust.size();
   auto AllUc = data->dust[0]->AllUc;
+  const int test_size = 20;  // Because we can't give nSpecies in the KOKKOS_LAMBDA
+
+  const real eps = this->eps;
+  const real coagCFL = this->coagCFL;
+  const bool physicalKernel = (this->kernel==3);
 
   idefix_for("Coagulation::AddSourceTerm",0,data->np_tot[KDIR],0,data->np_tot[JDIR],0,data->np_tot[IDIR],
             KOKKOS_LAMBDA (int k, int j, int i) {
@@ -172,3 +279,4 @@ void Coagulation::AddSourceTerm(DataBlock *data, const real t, const real dtin) 
   );
   data->ConsToPrim();
 }
+*/
