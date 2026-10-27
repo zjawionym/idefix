@@ -89,8 +89,7 @@ void Coagulation::AddSourceTerm(DataBlock *data, const real t, const real dtin) 
   const real coagCFL = this->coagCFL;
   const bool physicalKernel = (this->kernel==3);
 
-  Kokkos::MDRangePolicy<Kokkos::Rank<3>> policy({0,0,0}, {data->np_tot[KDIR], data->np_tot[JDIR], data->np_tot[IDIR]});
-  Kokkos::parallel_for("Coagulation::addSourceTerm-Space", policy,
+  idefix_for("Coagulation::AddSourceTerm",0,data->np_tot[KDIR],0,data->np_tot[JDIR],0,data->np_tot[IDIR],
     KOKKOS_LAMBDA (int k, int j, int i) {
       real rho[test_size];
       real g0[test_size];
@@ -141,21 +140,22 @@ void Coagulation::AddSourceTerm(DataBlock *data, const real t, const real dtin) 
           Flux[n+1] = flux;
         }
         //===== CFL CALCULATION =====//
-        real dt_sub = std::numeric_limits<double>::max();
+        
+        real dt_sub = Kokkos::Experimental::finite_max<real>::value;
         for(int n=0; n<nSpecies; n++) {
           real dflux = Flux[n+1] - Flux[n];
-          if(std::abs(dflux)>0.0 && rho[n]>eps*h(n)) {
-            dt_sub = std::min(dt_sub, std::abs(rho[n]/dflux));
+          if(Kokkos::fabs(dflux)>0.0 && rho[n]>eps*h(n)) {
+            dt_sub = Kokkos::fmin(dt_sub, Kokkos::fabs(rho[n]/dflux));
           }
         }
         real dt_coag = dt_sub*coagCFL;
-        dt_coag = std::min(dt_coag, dtin-time);  // Last substep
+        dt_coag = Kokkos::fmin(dt_coag, dtin-time);  // Last substep
         if(dt_coag<=0.0) {
-          IDEFIX_ERROR("Coagulation time step is non-positive");
+          Kokkos::abort("Error: coagulation time step is non-positive");
         }
         //===== EULER UPDATE =====//
         for(int n=0; n<nSpecies; n++) {
-          rho[n] = std::max(rho[n] - dt_coag*(Flux[n+1] - Flux[n]), eps*h(n));
+          rho[n] = Kokkos::fmax(rho[n] - dt_coag*(Flux[n+1] - Flux[n]), eps*h(n));
         }
         time += dt_coag;
       }
