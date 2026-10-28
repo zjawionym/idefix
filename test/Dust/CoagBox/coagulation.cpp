@@ -75,7 +75,6 @@ void Coagulation::AddSourceTerm(DataBlock *data, const real t, const real dtin) 
   // This function is implemented via operator splitting : coagulation is integrated in a step.
   // Hence, enroll the function with `data.EnrollUserStepFirst(&CoagSourceTerm);`.
   // This version does not preserve bins momentum yet.
-  // This version does not work on GPU yet.
   
   //==============================================//
   data->PrimToCons();
@@ -83,100 +82,137 @@ void Coagulation::AddSourceTerm(DataBlock *data, const real t, const real dtin) 
   IdefixArray3D<real> coagTabFlux = this->coagTabFlux;
   const int nSpecies = data->dust.size();
   auto AllUc = data->dust[0]->AllUc;
-  const int test_size = 20;  // Because we can't give nSpecies in the KOKKOS_LAMBDA
 
   const real eps = this->eps;
   const real coagCFL = this->coagCFL;
   const bool physicalKernel = (this->kernel==3);
 
-  /*
+
   typedef Kokkos::TeamPolicy<>              team_policy;
   typedef Kokkos::TeamPolicy<>::member_type member_type;
-  */
+  typedef Kokkos::DefaultExecutionSpace::scratch_memory_space ScratchSpace;
+  typedef Kokkos::View<real*, ScratchSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged>> ScratchViewType1D;
+  typedef Kokkos::View<real**, ScratchSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged>> ScratchViewType2D;
+  int scratch_size = 5*ScratchViewType1D::shmem_size(nSpecies*sizeof(real))
+                     + ScratchViewType2D::shmem_size(nSpecies*sizeof(real), nSpecies*sizeof(real))
+                     + ScratchViewType1D::shmem_size((nSpecies+1)*sizeof(real)); 
   
-  Kokkos::MDRangePolicy<Kokkos::Rank<3>> policy({0,0,0}, {data->np_tot[KDIR], data->np_tot[JDIR], data->np_tot[IDIR]});
+  const int NK = data->np_tot[KDIR];
+  const int NJ = data->np_tot[JDIR];
+  const int NI = data->np_tot[IDIR];
+  const int NKNJNI = NK*NJ*NI;
+  const int NJNI = NJ*NI;
+
+  const int level = 1;
   Kokkos::parallel_for(
-    "Coagulation::AddSourceTerm_Outer",
-    policy,
-    KOKKOS_LAMBDA (int k, int j, int i) {
-      real rho[test_size];
-      real g0[test_size];
-      real vx1[test_size];
-      real vx2[test_size];
-      real vx3[test_size];
-      real deltaV[test_size][test_size];
-      real Flux[test_size+1];
+    "Coagulation::AddSourceTerm_Space",
+    team_policy(NKNJNI, Kokkos::AUTO).set_scratch_size(level, Kokkos::PerTeam(scratch_size)),
+    KOKKOS_LAMBDA (member_type team_member) {
+      int k = team_member.league_rank()/NJNI;
+      int j = (team_member.league_rank() - k*NJNI)/NI;
+      int i = team_member.league_rank() - k*NJNI - j*NI;
+
+      ScratchViewType1D rho(team_member.team_scratch(level), nSpecies);
+      ScratchViewType1D g0(team_member.team_scratch(level), nSpecies);
+      ScratchViewType1D vx1(team_member.team_scratch(level), nSpecies);
+      ScratchViewType1D vx2(team_member.team_scratch(level), nSpecies);
+      ScratchViewType1D vx3(team_member.team_scratch(level), nSpecies);
+      ScratchViewType2D deltaV(team_member.team_scratch(level), nSpecies, nSpecies);
+      ScratchViewType1D Flux(team_member.team_scratch(level), nSpecies+1);
 
       // Initial State
-      for(int n=0; n<nSpecies; n++) {
-        rho[n] = AllUc(n,RHO,k,j,i);
-        vx1[n] = AllUc(n,MX1,k,j,i)/rho[n];
-        vx2[n] = AllUc(n,MX2,k,j,i)/rho[n];
-        vx3[n] = AllUc(n,MX3,k,j,i)/rho[n];
-      }
-
+      Kokkos::parallel_for(
+        Kokkos::TeamThreadRange(team_member, 0, nSpecies),
+        [&] (int n) {
+        rho(n) = AllUc(n,RHO,k,j,i);
+        vx1(n) = AllUc(n,MX1,k,j,i)/rho(n);
+        vx2(n) = AllUc(n,MX2,k,j,i)/rho(n);
+        vx3(n) = AllUc(n,MX3,k,j,i)/rho(n);
+        }
+      );
+      team_member.team_barrier();
       // Relative velocity
       if(physicalKernel) {
-        for(int lp=0; lp<nSpecies; lp++) {
-          for(int l=0; l<nSpecies; l++) {
-            real dvx = vx1[lp] - vx1[l];
-            real dvy = vx2[lp] - vx2[l];
-            real dvz = vx3[lp] - vx3[l];
-            deltaV[lp][l] = sqrt(dvx*dvx + dvy*dvy + dvz*dvz);
+        Kokkos::parallel_for(
+          Kokkos::TeamThreadRange(team_member, 0, nSpecies),
+          [&] (int lp) {
+            for(int l=0; l<nSpecies; l++) {
+              real dvx = vx1(lp) - vx1(l);
+              real dvy = vx2(lp) - vx2(l);
+              real dvz = vx3(lp) - vx3(l);
+              deltaV(lp,l) = sqrt(dvx*dvx + dvy*dvy + dvz*dvz);
+            }
           }
-        }
+        );
       }
-
+      team_member.team_barrier();
       //===== COAGULATION SUBCYCLING =====//
       real time = 0.0;
       while(time<dtin) {
-        Flux[0] = 0.0;  // No mass flux crossing the left boundary of the distribution
-        for(int n=0; n<nSpecies; n++) {
-          g0[n] = rho[n]/h(n);
-        }
+        Flux(0) = 0.0;  // No mass flux crossing the left boundary of the distribution
+        Kokkos::parallel_for(
+          Kokkos::TeamThreadRange(team_member, 0, nSpecies),
+          [&] (int n) {
+            g0(n) = rho(n)/h(n);
+          }
+        );
+        team_member.team_barrier();
         //===== FLUX CALCULATION =====//
-        for(int n=0; n<nSpecies; n++) {
-          real flux = 0.0;
-          for(int lp=0; lp <= n; lp++) {
-            real g0_lp = g0[lp];
-            for(int l=0; l<nSpecies; l++) {
-              real g0_l = g0[l];
-              real delta_v = physicalKernel ? deltaV[lp][l] : 1.0;
-              flux += g0_lp*g0_l*coagTabFlux(n,lp,l)*delta_v;
+        Kokkos::parallel_for(
+          Kokkos::TeamThreadRange(team_member, 0, nSpecies),
+          [&] (int n) {
+            real flux = 0.0;
+            for(int lp=0; lp <= n; lp++) {
+              real g0_lp = g0(lp);
+              for(int l=0; l<nSpecies; l++) {
+                real g0_l = g0(l);
+                real delta_v = physicalKernel ? deltaV(lp,l) : 1.0;
+                flux += g0_lp*g0_l*coagTabFlux(n,lp,l)*delta_v;
+              }
+          }
+          Flux(n+1) = flux;
+          }
+        );
+        //===== CFL CALCULATION =====//
+        real dt_sub = Kokkos::Experimental::finite_max<real>::value;
+        Kokkos::parallel_reduce(
+          Kokkos::TeamThreadRange(team_member, 0, nSpecies),
+          [&] (int n, real &local_min) {
+            real dflux = Flux(n+1) - Flux(n);
+            if(Kokkos::fabs(dflux)>0.0 && rho(n)>eps*h(n)) {
+              local_min = Kokkos::fabs(rho(n)/dflux);
             }
           }
-          Flux[n+1] = flux;
-        }
-        //===== CFL CALCULATION =====//
-        
-        real dt_sub = Kokkos::Experimental::finite_max<real>::value;
-        for(int n=0; n<nSpecies; n++) {
-          real dflux = Flux[n+1] - Flux[n];
-          if(Kokkos::fabs(dflux)>0.0 && rho[n]>eps*h(n)) {
-            dt_sub = Kokkos::fmin(dt_sub, Kokkos::fabs(rho[n]/dflux));
-          }
-        }
+        , Kokkos::Min<real>(dt_sub));
+
         real dt_coag = dt_sub*coagCFL;
         dt_coag = Kokkos::fmin(dt_coag, dtin-time);  // Last substep
         if(dt_coag<=0.0) {
           Kokkos::abort("Error: coagulation time step is non-positive");
         }
         //===== EULER UPDATE =====//
-        for(int n=0; n<nSpecies; n++) {
-          rho[n] = Kokkos::fmax(rho[n] - dt_coag*(Flux[n+1] - Flux[n]), eps*h(n));
-        }
+        Kokkos::parallel_for(
+          Kokkos::TeamThreadRange(team_member, 0, nSpecies),
+          [&] (int n) {
+          rho[n] = Kokkos::fmax(rho(n) - dt_coag*(Flux(n+1) - Flux(n)), eps*h(n));
+          }
+        );
+        team_member.team_barrier();
         time += dt_coag;
       }
       //===== UPDATE THE FINAL DENSITIES =====//
-      for(int n=0; n<nSpecies; n++) {
-        AllUc(n,RHO,k,j,i) = rho[n];
+      Kokkos::parallel_for(
+        Kokkos::TeamThreadRange(team_member, 0, nSpecies),
+        [&] (int n) {
+        AllUc(n,RHO,k,j,i) = rho(n);
         // To keep a constant velocity (just for the test with kernel = 3)
         // If we don't do that, the update on densities leads to update on velocities
         // We thus update the momentum with new densities in order to keep velocities (and dv) constants
-        AllUc(n,MX1,k,j,i) = rho[n]*vx1[n];
-        AllUc(n,MX2,k,j,i) = rho[n]*vx2[n];
-        AllUc(n,MX3,k,j,i) = rho[n]*vx3[n];
-      }
+        AllUc(n,MX1,k,j,i) = rho(n)*vx1(n);
+        AllUc(n,MX2,k,j,i) = rho(n)*vx2(n);
+        AllUc(n,MX3,k,j,i) = rho(n)*vx3(n);
+        }
+      );
     }
   ); 
   data->ConsToPrim();
