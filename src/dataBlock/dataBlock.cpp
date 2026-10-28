@@ -15,6 +15,7 @@
 // Licensed under CeCILL 2.1 License, see COPYING for more information
 // ***********************************************************************************
 
+#include <twin-checker/CheckerApi.h>
 #include <algorithm>
 #include <memory>
 #include <string>
@@ -28,6 +29,7 @@
 #ifdef WITH_HDF5
 #include "xdmf.hpp"
 #endif
+#include <cstdio>
 
 DataBlock::DataBlock(Grid &grid, Input &input) {
   idfx::pushRegion("DataBlock::DataBlock");
@@ -341,8 +343,6 @@ void DataBlock::ShowConfig() {
 
 
 real DataBlock::ComputeTimestep() {
-  // Compute the timestep using all of the enabled modules in the current dataBlock
-
   // First with the hydro block
   auto InvDt = hydro->InvDt;
   real dt;
@@ -354,6 +354,10 @@ real DataBlock::ComputeTimestep() {
                   dtmin=FMIN(ONE_F/InvDt(k,j,i),dtmin);
               },
           Kokkos::Min<real>(dt));
+
+  //TWIN-CHECK
+  TWCHECK(dt);
+
   if(haveDust) {
     for(int n = 0 ; n < dust.size() ; n++) {
       real dtDust;
@@ -368,6 +372,9 @@ real DataBlock::ComputeTimestep() {
           Kokkos::Min<real>(dtDust));
       dt = std::min(dt,dtDust);
     }
+
+    //TWIN-CHECK
+    TWCHECK(dt);
   }
   Kokkos::fence();
   return(dt);

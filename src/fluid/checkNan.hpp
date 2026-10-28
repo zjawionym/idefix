@@ -41,6 +41,9 @@ int Fluid<Phys>::CheckNan()  {
     }, Kokkos::Sum<int>(nanVc) // reduction variable
   );
 
+  //TWIN-CHECK
+  TWCHECK(nanVc);
+
   if constexpr(Phys::mhd) {
     IdefixArray4D<real> Vs=this->Vs;
     idefix_reduce("checkNanVs",
@@ -53,6 +56,9 @@ int Fluid<Phys>::CheckNan()  {
       }, Kokkos::Sum<int>(nanVs) // reduction variable
     );
   }
+
+  //TWIN-CHECK
+  TWCHECK(nanVs);
 
 
   int nanTot = nanVc+nanVs;

@@ -564,21 +564,20 @@ Fluid<Phys>::Fluid(Grid &grid, Input &input, DataBlock *datain, int n) {
 
   data->states["current"].PushArray(Uc, State::center, prefix+"_Uc");
 
-  InvDt = IdefixArray3D<real>(prefix+"_InvDt",
+  InvDt = IdefixCheckedArray3D<real>(prefix+"_InvDt",
                               data->np_tot[KDIR], data->np_tot[JDIR], data->np_tot[IDIR]);
-  cMax = IdefixArray3D<real>(prefix+"_cMax",
+  cMax = IdefixCheckedArray3D<real>(prefix+"_cMax",
                               data->np_tot[KDIR], data->np_tot[JDIR], data->np_tot[IDIR]);
-  dMax = IdefixArray3D<real>(prefix+"_dMax",
+  dMax = IdefixCheckedArray3D<real>(prefix+"_dMax",
                               data->np_tot[KDIR], data->np_tot[JDIR], data->np_tot[IDIR]);
-
   for(int i = 0 ; i < DIMENSIONS ; i++) {
-    FluxRiemann[i] = IdefixArray4D<real>(prefix+"_FluxRiemann_X"+std::to_string(i),
+    FluxRiemann[i] = IdefixCheckedArray4D<real>(prefix+"_FluxRiemann_X"+std::to_string(i),
                                         Phys::nvar+nTracer,
                                         data->np_tot[KDIR], data->np_tot[JDIR], data->np_tot[IDIR]);
   }
 
   if constexpr(Phys::mhd) {
-    Vs = IdefixArray4D<real>(prefix+"_Vs", DIMENSIONS,
+    Vs = IdefixCheckedArray4D<real>(prefix+"_Vs", DIMENSIONS,
               data->np_tot[KDIR]+KOFFSET, data->np_tot[JDIR]+JOFFSET, data->np_tot[IDIR]+IOFFSET);
     #ifdef EVOLVE_VECTOR_POTENTIAL
       #if DIMENSIONS == 1
@@ -596,19 +595,19 @@ Fluid<Phys>::Fluid(Grid &grid, Input &input, DataBlock *datain, int n) {
 
   if(this->haveCurrent) {
     // Allocate current (when hydro needs it)
-    J = IdefixArray4D<real>(prefix+"_J", 3,
+    J = IdefixCheckedArray4D<real>(prefix+"_J", 3,
                             data->np_tot[KDIR], data->np_tot[JDIR], data->np_tot[IDIR]);
   }
 
   // Allocate nonideal MHD effects array when a user-defined function is used
   if(this->resistivityStatus.status ==  UserDefFunction)
-    etaOhmic = IdefixArray3D<real>(prefix+"_etaOhmic",
+    etaOhmic = IdefixCheckedArray3D<real>(prefix+"_etaOhmic",
                                     data->np_tot[KDIR], data->np_tot[JDIR], data->np_tot[IDIR]);
   if(this->ambipolarStatus.status == UserDefFunction)
-    xAmbipolar = IdefixArray3D<real>(prefix+"_xAmbipolar",
+    xAmbipolar = IdefixCheckedArray3D<real>(prefix+"_xAmbipolar",
                                      data->np_tot[KDIR], data->np_tot[JDIR], data->np_tot[IDIR]);
   if(this->hallStatus.status == UserDefFunction)
-    xHall = IdefixArray3D<real>(prefix+"_xHall",
+    xHall = IdefixCheckedArray3D<real>(prefix+"_xHall",
                                   data->np_tot[KDIR], data->np_tot[JDIR], data->np_tot[IDIR]);
 
   // Fill the names of the fields

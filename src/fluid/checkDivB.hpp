@@ -60,9 +60,14 @@ real Fluid<Phys>::CheckDivB() {
     Kokkos::Max<real>(divB) // reduction
   );
 
+  //TWIN-CHECK
+  TWCHECK(divB);
+
 #ifdef WITH_MPI
   if(idfx::psize>1) {
     MPI_Allreduce(MPI_IN_PLACE, &divB, 1, realMPI, MPI_MAX, MPI_COMM_WORLD);
+    //TWIN-CHECK
+    TWCHECK(divB);
   }
 #endif
 

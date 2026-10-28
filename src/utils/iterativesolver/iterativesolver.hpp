@@ -214,6 +214,7 @@ void IterativeSolver<T>::TestErrorLINF() {
                   localMax = std::fmax(res(k,j,i) * res(k,j,i), localMax);
                 },
                 Kokkos::Max<real>(maxRes2));
+  TWCHECK(maxRes2);
 
   // Sum of squared rhs over the grid
   idefix_reduce("SumDensity2",
@@ -224,6 +225,7 @@ void IterativeSolver<T>::TestErrorLINF() {
                   localSum += rhs(k,j,i) * rhs(k,j,i);
                 },
                 Kokkos::Sum<real>(rho2));
+  TWCHECK(rho2);
 
   // Reduction on the whole grid
   #ifdef WITH_MPI
@@ -303,10 +305,12 @@ real IterativeSolver<T>::ComputeDotProduct(IdefixArray3D<real> mat1, IdefixArray
                   localSum += mat1(k,j,i) * mat2(k,j,i);
                 },
                 Kokkos::Sum<real>(sum));
+  TWCHECK(sum);
 
   // Reduction on the whole grid
   #ifdef WITH_MPI
   MPI_Allreduce(MPI_IN_PLACE, &sum, 1, realMPI, MPI_SUM, MPI_COMM_WORLD);
+  TWCHECK(sum);
   #endif
 
   idfx::popRegion();

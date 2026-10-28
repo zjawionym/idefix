@@ -24,6 +24,7 @@
 #include <string>
 #include "idefix.hpp"
 #include "global.hpp"
+#include "tw.hpp"
 
 #define KOKKOS_VECTOR_LENGTH  8
 
@@ -83,11 +84,20 @@ typedef Kokkos::TeamPolicy<>::member_type  member_type;
   #endif
 #endif
 
+#define idefix_for(...) \
+  do { \
+    Kokkos::fence(); \
+    TWCHECKALL("before: "); \
+    idefix_for_impl(__VA_ARGS__); \
+    Kokkos::fence(); \
+    TWCHECKALL("after: "); \
+  } while(0)
 
+#define idefix_for_no_check(...) idefix_for_impl(__VA_ARGS__)
 
 // 1D loop
 template <typename Function>
-inline void idefix_for(const std::string & NAME,
+inline void idefix_for_impl(const std::string & NAME,
                        const int & IB, const int & IE,
                        Function function) {
   #ifdef DEBUG
@@ -109,7 +119,7 @@ inline void idefix_for(const std::string & NAME,
 
 // 2D loop
 template <typename Function>
-inline void idefix_for(const std::string & NAME,
+inline void idefix_for_impl(const std::string & NAME,
                        const int & JB, const int & JE,
                        const int & IB, const int & IE,
                        Function function) {
@@ -166,7 +176,7 @@ inline void idefix_for(const std::string & NAME,
 
 // 3D loop
 template <typename Function>
-inline void idefix_for(const std::string & NAME,
+inline void idefix_for_impl(const std::string & NAME,
                        const int & KB, const int & KE,
                        const int & JB, const int & JE,
                        const int & IB, const int & IE,
@@ -250,7 +260,7 @@ inline void idefix_for(const std::string & NAME,
 
 // 4D loop
 template <typename Function>
-inline void idefix_for(const std::string & NAME,
+inline void idefix_for_impl(const std::string & NAME,
                        const int NB, const int NE,
                        const int KB, const int KE,
                        const int JB, const int JE,

@@ -608,8 +608,12 @@ void Laplacian::EnforceBoundary(int dir, BoundarySide side, LaplacianBoundaryTyp
                       psi += localVar(k,j,iref);
                     },Kokkos::Sum<real> (psiIn));
 
+      //TWIN-CHECK
+      TWCHECK(psiIn);
+
       #ifdef WITH_MPI
         MPI_Allreduce(MPI_IN_PLACE, &psiIn, 1, realMPI, MPI_SUM, originComm);
+        TWCHECK(psiIn);
       #endif
       // Do a mean by dividing by the number of points
       psiIn = psiIn/(data->mygrid->np_int[JDIR]*data->mygrid->np_int[KDIR]);
@@ -694,10 +698,12 @@ real Laplacian::ComputeCFL() {
                 },
                 Kokkos::Min<real>(dx1min2));
 
+    TWCHECK(dx1min2);
     // Reduction on the whole grid
     #ifdef WITH_MPI
     MPI_Allreduce(MPI_IN_PLACE, &dx1min2, 1, realMPI, MPI_MIN, MPI_COMM_WORLD);
     #endif
+    TWCHECK(dx1min2);
 
   real dtmax = 1. / 2. * dx1min2;
 
@@ -717,6 +723,7 @@ real Laplacian::ComputeCFL() {
                   localMin = std::fmin(dx1(i) * dx1(i), localMin);
                 },
                 Kokkos::Min<real>(dx1min2));
+  TWCHECK(dx1min2);
 
   idefix_reduce("GetMin2",
                 kbeg, kend,
@@ -730,6 +737,7 @@ real Laplacian::ComputeCFL() {
                   localMin = std::fmin(dl * dl, localMin);
                 },
                 Kokkos::Min<real>(dx2min2));
+    TWCHECK(dx2min2);
 
     // Reduction on the whole grid
     #ifdef WITH_MPI
@@ -759,6 +767,8 @@ real Laplacian::ComputeCFL() {
                   localMin = std::fmin(dx1(i) * dx1(i), localMin);
                 },
                 Kokkos::Min<real>(dx1min2));
+  TWCHECK(dx1min2);
+
 
   idefix_reduce("GetMin2",
                 kbeg, kend,
@@ -772,6 +782,7 @@ real Laplacian::ComputeCFL() {
                   localMin = std::fmin(dl * dl, localMin);
                 },
                 Kokkos::Min<real>(dx2min2));
+  TWCHECK(dx2min2);
 
   idefix_reduce("GetMin3",  // Cylindrical not taken into account as it shouldn't be used in 3D
                 kbeg, kend,
@@ -785,6 +796,7 @@ real Laplacian::ComputeCFL() {
                   localMin = std::fmin(dl * dl, localMin);
                 },
                 Kokkos::Min<real>(dx3min2));
+  TWCHECK(dx3min2);
 
     // Reduction on the whole grid
     #ifdef WITH_MPI

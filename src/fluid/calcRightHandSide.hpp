@@ -16,6 +16,7 @@
 #ifndef FLUID_CALCRIGHTHANDSIDE_HPP_
 #define FLUID_CALCRIGHTHANDSIDE_HPP_
 
+#include <twin-checker/CheckerApi.h>
 #include "fluid.hpp"
 #include "dataBlock.hpp"
 #include "gravity.hpp"
@@ -599,6 +600,10 @@ void Fluid<Phys>::CalcRightHandSide(real t, real dt) {
              data->beg[IDIR],data->end[IDIR],
               calcRHS);
 
+  //twin-check
+  TWCHECK_KOKKOS_ARRAY(cMax);
+  TWCHECK_KOKKOS_ARRAY(dMax);
+  TWCHECK_KOKKOS_ARRAY(InvDt);
 
   idfx::popRegion();
 }

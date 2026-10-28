@@ -16,6 +16,7 @@
 #ifndef RKL_RKL_HPP_
 #define RKL_RKL_HPP_
 
+#include <twin-checker/CheckerApi.h>
 #include <string>
 #include <vector>
 
@@ -652,6 +653,10 @@ void RKLegendre<Phys>::ResetStage() {
              0,data->np_tot[IDIR],
              func);
 
+
+  //TWIN-CHECK
+  TWCHECK_KOKKOS_ARRAY(this->hydro->InvDt);
+
   idfx::popRegion();
 }
 
@@ -671,6 +676,9 @@ void RKLegendre<Phys>::ComputeDt() {
     },
     Kokkos::Max<real>(newinvdt)
   );
+
+  //TWIN-CHECK
+  TWCHECK(newinvdt);
 
 #ifdef WITH_MPI
   if(idfx::psize>1) {
@@ -930,6 +938,10 @@ void RKLegendre<Phys>::CalcParabolicRHS(real t) {
                                                         dMax(k,j,i)) / (dl*dl);
       });
   }
+
+  //TWIN-CHECK
+  TWCHECK_KOKKOS_ARRAY(invDt);
+
 
   idfx::popRegion();
 }

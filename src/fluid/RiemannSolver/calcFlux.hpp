@@ -29,12 +29,23 @@
 #include "hllDust.hpp"
 
 #include "shockFlattening.hpp"
+#include "tw.hpp"
 
 // Compute Riemann fluxes from states
 template <typename Phys>
 template <int dir>
 void RiemannSolver<Phys>::CalcFlux(IdefixArray4D<real> &flux) {
   idfx::pushRegion("RiemannSolver::CalcFlux");
+
+  TWCHECK_KOKKOS_ARRAY(flux);
+  TWCHECK_KOKKOS_ARRAY(this->hydro->Uc);
+  TWCHECK_KOKKOS_ARRAY(this->Vc);
+  TWCHECK_KOKKOS_ARRAY(this->Vs);
+  TWCHECK_KOKKOS_ARRAY(this->cMax);
+  TWCHECK_KOKKOS_ARRAY(this->data->dx[IDIR]);
+  TWCHECK_KOKKOS_ARRAY(this->data->dx[JDIR]);
+  TWCHECK_KOKKOS_ARRAY(this->data->dx[KDIR]);
+
   if constexpr(dir == IDIR) {
     // enable shock flattening
     if(haveShockFlattening) shockFlattening->FindShock();
@@ -88,6 +99,15 @@ void RiemannSolver<Phys>::CalcFlux(IdefixArray4D<real> &flux) {
       }
     }// Dust
   }
+
+  TWCHECK_KOKKOS_ARRAY(this->data->dx[IDIR]);
+  TWCHECK_KOKKOS_ARRAY(this->data->dx[JDIR]);
+  TWCHECK_KOKKOS_ARRAY(this->data->dx[KDIR]);
+  TWCHECK_KOKKOS_ARRAY(this->Vc);
+  TWCHECK_KOKKOS_ARRAY(this->Vs);
+  TWCHECK_KOKKOS_ARRAY(this->cMax);
+  TWCHECK_KOKKOS_ARRAY(flux);
+
   idfx::popRegion();
 }
 #endif // FLUID_RIEMANNSOLVER_CALCFLUX_HPP_

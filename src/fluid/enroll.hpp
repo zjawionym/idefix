@@ -15,7 +15,9 @@
 #ifndef FLUID_ENROLL_HPP_
 #define FLUID_ENROLL_HPP_
 
+#include <twin-checker/CheckerApi.h>
 #include "dataBlock.hpp"
+
 template<typename Phys>
 void Fluid<Phys>::EnrollIsoSoundSpeed(IsoSoundSpeedFunc myFunc) {
   if constexpr(!Phys::isothermal) {
@@ -131,6 +133,10 @@ void Fluid<Phys>::ResetStage() {
     KOKKOS_LAMBDA (int k, int j, int i) {
       InvDt(k,j,i) = ZERO_F;
   });
+
+
+  //TWIN-CHECK
+  TWCHECK_KOKKOS_ARRAY(InvDt);
 
   idfx::popRegion();
 }

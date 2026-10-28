@@ -202,67 +202,67 @@ ConstrainedTransport<Phys>::ConstrainedTransport(Input &input, Fluid<Phys> *hydr
     sbEyRL = idfx::IdefixCommArray2D<real>("EMF_sbEyRL", data->np_tot[KDIR], data->np_tot[JDIR]);
   }
 
-  D_EXPAND( ez = IdefixArray3D<real>("EMF_ez",
+  D_EXPAND( ez = IdefixCheckedArray3D<real>("EMF_ez",
                               data->np_tot[KDIR], data->np_tot[JDIR], data->np_tot[IDIR]);  ,
                                                                                             ,
-            ex = IdefixArray3D<real>("EMF_ex",
+            ex = IdefixCheckedArray3D<real>("EMF_ex",
                               data->np_tot[KDIR], data->np_tot[JDIR], data->np_tot[IDIR]);
-            ey = IdefixArray3D<real>("EMF_ey",
+            ey = IdefixCheckedArray3D<real>("EMF_ey",
                               data->np_tot[KDIR], data->np_tot[JDIR], data->np_tot[IDIR]);  )
 
-  D_EXPAND( ezi = IdefixArray3D<real>("EMF_ezi",
+  D_EXPAND( ezi = IdefixCheckedArray3D<real>("EMF_ezi",
                               data->np_tot[KDIR], data->np_tot[JDIR], data->np_tot[IDIR]);
-            ezj = IdefixArray3D<real>("EMF_ezj",
+            ezj = IdefixCheckedArray3D<real>("EMF_ezj",
                               data->np_tot[KDIR], data->np_tot[JDIR], data->np_tot[IDIR]);  ,
                                                                                             ,
-            exj = IdefixArray3D<real>("EMF_exj",
+            exj = IdefixCheckedArray3D<real>("EMF_exj",
                               data->np_tot[KDIR], data->np_tot[JDIR], data->np_tot[IDIR]);
-            exk = IdefixArray3D<real>("EMF_exj",
+            exk = IdefixCheckedArray3D<real>("EMF_exj",
                               data->np_tot[KDIR], data->np_tot[JDIR], data->np_tot[IDIR]);
-            eyi = IdefixArray3D<real>("EMF_eyi",
+            eyi = IdefixCheckedArray3D<real>("EMF_eyi",
                               data->np_tot[KDIR], data->np_tot[JDIR], data->np_tot[IDIR]);
-            eyk = IdefixArray3D<real>("EMF_eyi",
+            eyk = IdefixCheckedArray3D<real>("EMF_eyi",
                               data->np_tot[KDIR], data->np_tot[JDIR], data->np_tot[IDIR]); )
 
   if(averaging==uct_contact) {
-    D_EXPAND( svx = IdefixArray3D<real>("EMF_svx",
+    D_EXPAND( svx = IdefixCheckedArray3D<real>("EMF_svx",
                                 data->np_tot[KDIR], data->np_tot[JDIR], data->np_tot[IDIR]);  ,
-              svy = IdefixArray3D<real>("EMF_svy",
+              svy = IdefixCheckedArray3D<real>("EMF_svy",
                                 data->np_tot[KDIR], data->np_tot[JDIR], data->np_tot[IDIR]);  ,
-              svz = IdefixArray3D<real>("EMF_svz",
+              svz = IdefixCheckedArray3D<real>("EMF_svz",
                                 data->np_tot[KDIR], data->np_tot[JDIR], data->np_tot[IDIR]);  )
   }
 
 
   if(averaging==uct_hll || averaging==uct_hlld) {
-    D_EXPAND( axL = IdefixArray3D<real>("EMF_axL",
+    D_EXPAND( axL = IdefixCheckedArray3D<real>("EMF_axL",
                                 data->np_tot[KDIR], data->np_tot[JDIR], data->np_tot[IDIR]);
-              axR = IdefixArray3D<real>("EMF_axR",
+              axR = IdefixCheckedArray3D<real>("EMF_axR",
                                 data->np_tot[KDIR], data->np_tot[JDIR], data->np_tot[IDIR]);  ,
 
-              ayL = IdefixArray3D<real>("EMF_ayL",
+              ayL = IdefixCheckedArray3D<real>("EMF_ayL",
                                 data->np_tot[KDIR], data->np_tot[JDIR], data->np_tot[IDIR]);
-              ayR = IdefixArray3D<real>("EMF_ayR",
+              ayR = IdefixCheckedArray3D<real>("EMF_ayR",
                                 data->np_tot[KDIR], data->np_tot[JDIR], data->np_tot[IDIR]);  ,
 
-              azL = IdefixArray3D<real>("EMF_azL",
+              azL = IdefixCheckedArray3D<real>("EMF_azL",
                                 data->np_tot[KDIR], data->np_tot[JDIR], data->np_tot[IDIR]);
-              azR = IdefixArray3D<real>("EMF_azR",
+              azR = IdefixCheckedArray3D<real>("EMF_azR",
                                 data->np_tot[KDIR], data->np_tot[JDIR], data->np_tot[IDIR]);  )
 
-    D_EXPAND( dxL = IdefixArray3D<real>("EMF_dxL",
+    D_EXPAND( dxL = IdefixCheckedArray3D<real>("EMF_dxL",
                                 data->np_tot[KDIR], data->np_tot[JDIR], data->np_tot[IDIR]);
-              dxR = IdefixArray3D<real>("EMF_dxR",
+              dxR = IdefixCheckedArray3D<real>("EMF_dxR",
                                 data->np_tot[KDIR], data->np_tot[JDIR], data->np_tot[IDIR]);  ,
 
-              dyL = IdefixArray3D<real>("EMF_dyL",
+              dyL = IdefixCheckedArray3D<real>("EMF_dyL",
                                 data->np_tot[KDIR], data->np_tot[JDIR], data->np_tot[IDIR]);
-              dyR = IdefixArray3D<real>("EMF_dyR",
+              dyR = IdefixCheckedArray3D<real>("EMF_dyR",
                                 data->np_tot[KDIR], data->np_tot[JDIR], data->np_tot[IDIR]);  ,
 
-              dzL = IdefixArray3D<real>("EMF_dzL",
+              dzL = IdefixCheckedArray3D<real>("EMF_dzL",
                                 data->np_tot[KDIR], data->np_tot[JDIR], data->np_tot[IDIR]);
-              dzR = IdefixArray3D<real>("EMF_dzR",
+              dzR = IdefixCheckedArray3D<real>("EMF_dzR",
                                 data->np_tot[KDIR], data->np_tot[JDIR], data->np_tot[IDIR]);  )
   }
   if(averaging==uct_hlld) {
@@ -272,9 +272,12 @@ ConstrainedTransport<Phys>::ConstrainedTransport(Input &input, Fluid<Phys> *hydr
     }
   }
 
-  Ex1 = IdefixArray3D<real>("EMF_Ex1", data->np_tot[KDIR], data->np_tot[JDIR], data->np_tot[IDIR]);
-  Ex2 = IdefixArray3D<real>("EMF_Ex2", data->np_tot[KDIR], data->np_tot[JDIR], data->np_tot[IDIR]);
-  Ex3 = IdefixArray3D<real>("EMF_Ex3", data->np_tot[KDIR], data->np_tot[JDIR], data->np_tot[IDIR]);
+  Ex1 = IdefixCheckedArray3D<real>("EMF_Ex1",
+      data->np_tot[KDIR], data->np_tot[JDIR], data->np_tot[IDIR]);
+  Ex2 = IdefixCheckedArray3D<real>("EMF_Ex2",
+      data->np_tot[KDIR], data->np_tot[JDIR], data->np_tot[IDIR]);
+  Ex3 = IdefixCheckedArray3D<real>("EMF_Ex3",
+      data->np_tot[KDIR], data->np_tot[JDIR],data->np_tot[IDIR]);
 
   // MPI initialisation
   #ifdef WITH_MPI

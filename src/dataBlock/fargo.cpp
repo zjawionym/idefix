@@ -263,10 +263,14 @@ void Fargo::CheckMaxDisplacement() {
         invDtLoc = FMAX(invDtLoc, FABS(w/dphi));
       },
       Kokkos::Max<real>(invDt));
+    //TWIN-CHECK
+    TWCHECK(invDt);
   #ifdef WITH_MPI
     if(idfx::psize>1) {
           MPI_SAFE_CALL(MPI_Allreduce(MPI_IN_PLACE, &invDt, 1, realMPI, MPI_MAX, MPI_COMM_WORLD));
         }
+    //TWIN-CHECK
+    TWCHECK(invDt);
   #endif
   this->dtMax = this->maxShift / invDt;
 }

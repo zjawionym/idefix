@@ -315,8 +315,10 @@ void SelfGravity::InitSolver() {
       if(std::isnan(density(k,j,i))) nnan++;
     }, Kokkos::Sum<int>(nanDensity) // reduction variable
   );
+  TWCHECK(nanDensity);
   #ifdef WITH_MPI
     MPI_Allreduce(MPI_IN_PLACE, &nanDensity,1,MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+    TWCHECK(nanDensity);
   #endif
 
   if(nanDensity>0) {

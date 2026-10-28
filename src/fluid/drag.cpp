@@ -11,8 +11,10 @@
 //
 // Licensed under CeCILL 2.1 License, see COPYING for more information
 // ***********************************************************************************
-#include "drag.hpp"
+
+#include <twin-checker/CheckerApi.h>
 #include <string>
+#include "drag.hpp"
 #include "physics.hpp"
 
 void Drag::AddDragForce(const real dt) {
@@ -60,6 +62,10 @@ void Drag::AddDragForce(const real dt) {
       if(feedback) idt += gamma*VcDust(RHO,k,j,i);
       InvDt(k,j,i) += idt;
     });
+
+  //TWIN-CHECK
+  TWCHECK_KOKKOS_ARRAY(InvDt);
+
   idfx::popRegion();
 }
 //
