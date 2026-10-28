@@ -89,7 +89,15 @@ void Coagulation::AddSourceTerm(DataBlock *data, const real t, const real dtin) 
   const real coagCFL = this->coagCFL;
   const bool physicalKernel = (this->kernel==3);
 
-  idefix_for("Coagulation::AddSourceTerm",0,data->np_tot[KDIR],0,data->np_tot[JDIR],0,data->np_tot[IDIR],
+  /*
+  typedef Kokkos::TeamPolicy<>              team_policy;
+  typedef Kokkos::TeamPolicy<>::member_type member_type;
+  */
+  
+  Kokkos::MDRangePolicy<Kokkos::Rank<3>> policy({0,0,0}, {data->np_tot[KDIR], data->np_tot[JDIR], data->np_tot[IDIR]});
+  Kokkos::parallel_for(
+    "Coagulation::AddSourceTerm_Outer",
+    policy,
     KOKKOS_LAMBDA (int k, int j, int i) {
       real rho[test_size];
       real g0[test_size];
@@ -170,7 +178,7 @@ void Coagulation::AddSourceTerm(DataBlock *data, const real t, const real dtin) 
         AllUc(n,MX3,k,j,i) = rho[n]*vx3[n];
       }
     }
-  );
+  ); 
   data->ConsToPrim();
 }
 
