@@ -68,6 +68,7 @@ Coagulation::Coagulation(Input &input) {
   Kokkos::deep_copy(this->coagTabFlux, coagTabFluxHost);
 }
 
+#ifdef TWIN_NEW
 void Coagulation::AddSourceTerm(DataBlock *data, const real t, const real dtin) {
   //==============================================//
   
@@ -124,10 +125,15 @@ void Coagulation::AddSourceTerm(DataBlock *data, const real t, const real dtin) 
       Kokkos::parallel_for(
         Kokkos::TeamThreadRange(team_member, 0, nSpecies),
         [&] (int n) {
-        rho(n) = AllUc(n,RHO,k,j,i);
-        vx1(n) = AllUc(n,MX1,k,j,i)/rho(n);
-        vx2(n) = AllUc(n,MX2,k,j,i)/rho(n);
-        vx3(n) = AllUc(n,MX3,k,j,i)/rho(n);
+          printf("n = %d\n",n);
+          rho(n) = AllUc(n,RHO,k,j,i);
+          TWCHECK(rho(n));
+          vx1(n) = AllUc(n,MX1,k,j,i)/rho(n);
+          TWCHECK(vx1(n));
+          vx2(n) = AllUc(n,MX2,k,j,i)/rho(n);
+          TWCHECK(vx2(n));
+          vx3(n) = AllUc(n,MX3,k,j,i)/rho(n);
+          TWCHECK(vx3(n));
         }
       );
       team_member.team_barrier();
@@ -148,12 +154,16 @@ void Coagulation::AddSourceTerm(DataBlock *data, const real t, const real dtin) 
       team_member.team_barrier();
       //===== COAGULATION SUBCYCLING =====//
       real time = 0.0;
+      int count = 0;
       while(time<dtin) {
+        printf("========== sub-cycle n = %d ==========\n",count);
         Flux(0) = 0.0;  // No mass flux crossing the left boundary of the distribution
         Kokkos::parallel_for(
           Kokkos::TeamThreadRange(team_member, 0, nSpecies),
           [&] (int n) {
             g0(n) = rho(n)/h(n);
+            printf("%d\n",n);
+            TWCHECK(g0(n));
           }
         );
         team_member.team_barrier();
@@ -161,18 +171,30 @@ void Coagulation::AddSourceTerm(DataBlock *data, const real t, const real dtin) 
         Kokkos::parallel_for(
           Kokkos::TeamThreadRange(team_member, 0, nSpecies),
           [&] (int n) {
+            printf("n = %d\n", n);
             real flux = 0.0;
             for(int lp=0; lp <= n; lp++) {
+              //printf("lp = %d\n", lp);
               real g0_lp = g0(lp);
               for(int l=0; l<nSpecies; l++) {
+                //printf("l = %d\n", l);
                 real g0_l = g0(l);
+                //printf("g0_l\n");
+                TWCHECK(g0_l);
                 real delta_v = physicalKernel ? deltaV(lp,l) : 1.0;
+                //printf("delta_v\n");
+                TWCHECK(delta_v);
                 flux += g0_lp*g0_l*coagTabFlux(n,lp,l)*delta_v;
+                //printf("flux\n");
+                TWCHECK(flux);
               }
-          }
-          Flux(n+1) = flux;
+            }
+            printf("Flux before n = %d\n",n);
+            Flux(n+1) = flux;
           }
         );
+        printf("Flux after\n");
+        team_member.team_barrier();
         //===== CFL CALCULATION =====//
         real dt_sub = Kokkos::Experimental::finite_max<real>::value;
         Kokkos::parallel_reduce(
@@ -180,11 +202,11 @@ void Coagulation::AddSourceTerm(DataBlock *data, const real t, const real dtin) 
           [&] (int n, real &local_min) {
             real dflux = Flux(n+1) - Flux(n);
             if(Kokkos::fabs(dflux)>0.0 && rho(n)>eps*h(n)) {
-              local_min = Kokkos::fabs(rho(n)/dflux);
+              local_min = Kokkos::fmin(Kokkos::fabs(rho(n)/dflux), local_min);
             }
           }
         , Kokkos::Min<real>(dt_sub));
-
+        TWCHECK(dt_sub);
         real dt_coag = dt_sub*coagCFL;
         dt_coag = Kokkos::fmin(dt_coag, dtin-time);  // Last substep
         if(dt_coag<=0.0) {
@@ -194,11 +216,14 @@ void Coagulation::AddSourceTerm(DataBlock *data, const real t, const real dtin) 
         Kokkos::parallel_for(
           Kokkos::TeamThreadRange(team_member, 0, nSpecies),
           [&] (int n) {
-          rho[n] = Kokkos::fmax(rho(n) - dt_coag*(Flux(n+1) - Flux(n)), eps*h(n));
+          rho(n) = Kokkos::fmax(rho(n) - dt_coag*(Flux(n+1) - Flux(n)), eps*h(n));
+          TWCHECK(rho(n));
           }
         );
         team_member.team_barrier();
         time += dt_coag;
+        count += 1;
+        printf("Here we go again for a second sub-cycle\n");
       }
       //===== UPDATE THE FINAL DENSITIES =====//
       Kokkos::parallel_for(
@@ -214,11 +239,12 @@ void Coagulation::AddSourceTerm(DataBlock *data, const real t, const real dtin) 
         }
       );
     }
-  ); 
+  );
+  exit(1); 
   data->ConsToPrim();
 }
 
-/*
+#else
 void Coagulation::AddSourceTerm(DataBlock *data, const real t, const real dtin) {
   //==============================================//
   
@@ -240,7 +266,7 @@ void Coagulation::AddSourceTerm(DataBlock *data, const real t, const real dtin) 
   const real coagCFL = this->coagCFL;
   const bool physicalKernel = (this->kernel==3);
 
-  idefix_for("Coagulation::AddSourceTerm",0,data->np_tot[KDIR],0,data->np_tot[JDIR],0,data->np_tot[IDIR],
+  idefix_for_no_check("Coagulation::AddSourceTerm",0,data->np_tot[KDIR],0,data->np_tot[JDIR],0,data->np_tot[IDIR],
             KOKKOS_LAMBDA (int k, int j, int i) {
               real rho[test_size];
               real g0[test_size];
@@ -253,10 +279,15 @@ void Coagulation::AddSourceTerm(DataBlock *data, const real t, const real dtin) 
               // Initial State
               for(int n=0; n<nSpecies; n++) {
                 rho[n] = AllUc(n,RHO,k,j,i);
+                TWCHECK(rho[n]);
                 vx1[n] = AllUc(n,MX1,k,j,i)/rho[n];
+                TWCHECK(vx1[n]);
                 vx2[n] = AllUc(n,MX2,k,j,i)/rho[n];
+                TWCHECK(vx2[n]);
                 vx3[n] = AllUc(n,MX3,k,j,i)/rho[n];
+                TWCHECK(vx3[n]);
               }
+              
 
               // Relative velocity
               if(physicalKernel) {
@@ -276,6 +307,8 @@ void Coagulation::AddSourceTerm(DataBlock *data, const real t, const real dtin) 
                 Flux[0] = 0.0;  // No mass flux crossing the left boundary of the distribution
                 for(int n=0; n<nSpecies; n++) {
                   g0[n] = rho[n]/h(n);
+                  printf("%d\n",n);
+                  TWCHECK(g0[n]);
                 }
                 //===== FLUX CALCULATION =====//
                 for(int n=0; n<nSpecies; n++) {
@@ -284,8 +317,11 @@ void Coagulation::AddSourceTerm(DataBlock *data, const real t, const real dtin) 
                     real g0_lp = g0[lp];
                     for(int l=0; l<nSpecies; l++) {
                       real g0_l = g0[l];
+                      TWCHECK(g0_l);
                       real delta_v = physicalKernel ? deltaV[lp][l] : 1.0;
+                      TWCHECK(delta_v);
                       flux += g0_lp*g0_l*coagTabFlux(n,lp,l)*delta_v;
+                      TWCHECK(flux);
                     }
                   }
                   Flux[n+1] = flux;
@@ -298,6 +334,7 @@ void Coagulation::AddSourceTerm(DataBlock *data, const real t, const real dtin) 
                     dt_sub = std::min(dt_sub, std::abs(rho[n]/dflux));
                   }
                 }
+                TWCHECK(dt_sub);
                 real dt_coag = dt_sub*coagCFL;
                 dt_coag = std::min(dt_coag, dtin-time);  // Last substep
                 if(dt_coag<=0.0) {
@@ -306,6 +343,7 @@ void Coagulation::AddSourceTerm(DataBlock *data, const real t, const real dtin) 
                 //===== EULER UPDATE =====//
                 for(int n=0; n<nSpecies; n++) {
                   rho[n] = std::max(rho[n] - dt_coag*(Flux[n+1] - Flux[n]), eps*h(n));
+                  TWCHECK(rho[n]);
                 }
                 time += dt_coag;
               }
@@ -322,5 +360,6 @@ void Coagulation::AddSourceTerm(DataBlock *data, const real t, const real dtin) 
             }
   );
   data->ConsToPrim();
+  exit(1);
 }
-*/
+#endif
